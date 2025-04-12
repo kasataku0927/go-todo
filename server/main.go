@@ -12,13 +12,25 @@ import (
 
 func main() {
 	// データベースの初期化
-	db.Init()
+	err := db.Init()
+	if err != nil {
+		log.Fatalf("データベース初期化エラー: %v", err)
+	}
 
 	// ServeMuxを作成
 	mux := http.NewServeMux()
 
-	// ルートハンドラを定義
-	mux.HandleFunc("/todos", handlers.TodoHandler)
+	// RESTfulなAPIエンドポイントを設定
+	mux.HandleFunc("/todos", handlers.TodosHandler)
+
+	// /todos/123 のような特定のIDに対するハンドラー
+	mux.HandleFunc("/todos/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/todos/" {
+			http.NotFound(w, r)
+			return
+		}
+		handlers.TodoHandler(w, r)
+	})
 
 	// CORS設定
 	handler := cors.New(cors.Options{

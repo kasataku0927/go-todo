@@ -2,38 +2,21 @@ package models
 
 import (
 	"database/sql"
-	"fmt"
-	"log"
-	"os"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
+	"github.com/kasataku0927/go-todo/database/db"
 )
 
 type TodoModel struct {
 	db *sql.DB
 }
 
-func NewTodoModel() *TodoModel {
-	err := godotenv.Load()
+func NewTodoModel() (*TodoModel, error) {
+	database, err := db.GetDB()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		return nil, err
 	}
-
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	dbName := os.Getenv("DB_NAME")
-
-	connectionString := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", user, password, host, port, dbName)
-
-	db, err := sql.Open("mysql", connectionString)
-	if err != nil {
-		panic(err)
-	}
-	return &TodoModel{db: db}
+	return &TodoModel{db: database}, nil
 }
 
 type Todo struct {
@@ -70,7 +53,6 @@ func (t *TodoModel) GetTodos() ([]Todo, error) {
 
 	return todos, nil
 }
-
 func (t *TodoModel) CreateTodo(todo *Todo) error {
 	// Insert a new todo into the database
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
@@ -91,7 +73,6 @@ func (t *TodoModel) CreateTodo(todo *Todo) error {
 
 	return nil
 }
-
 func (t *TodoModel) UpdateTodo(id int, todo *Todo) error {
 	// Update an existing todo in the database
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
@@ -103,7 +84,6 @@ func (t *TodoModel) UpdateTodo(id int, todo *Todo) error {
 	}
 	return nil
 }
-
 func (t *TodoModel) DeleteTodo(id int) error {
 	// Delete an existing todo from the database
 	query := "DELETE FROM todos WHERE id = ?"
@@ -113,7 +93,6 @@ func (t *TodoModel) DeleteTodo(id int) error {
 	}
 	return nil
 }
-
 func (t *TodoModel) GetTodo(id int) (*Todo, error) {
 	// Get a todo from the database by id
 	query := "SELECT id, title, description, completed, created_at, updated_at FROM todos WHERE id = ?"

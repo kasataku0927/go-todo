@@ -43,3 +43,14 @@ func Init() error {
 	fmt.Println("データベースに正常に接続されました")
 	return nil
 }
+
+// GetDB はデータベースコネクションを取得するための関数
+func GetDB() (*sql.DB, error) {
+	if DB == nil {
+		err := Init()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return DB, nil
+}

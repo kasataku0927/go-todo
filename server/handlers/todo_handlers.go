@@ -1,31 +1,61 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
+
 	"github.com/kasataku0927/go-todo/server/models"
 )
 
-var todoModel = models.NewTodoModel()
+var todoModel *models.TodoModel
 
-func TodoHandler(w http.ResponseWriter, r *http.Request) {
+func init() {
+	var err error
+	todoModel, err = models.NewTodoModel()
+	if err != nil {
+		log.Fatalf("TodoModelの初期化エラー: %v", err)
+	}
+}
+
+// TodosHandler はTodoコレクション全体に対するリクエストを処理
+func TodosHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		getTodos(w, r)
+		GetTodos(w, r)
 	case http.MethodPost:
-		createTodo(w, r)
-	case http.MethodPut:
-		updateTodo(w, r)
-	case http.MethodDelete:
-		deleteTodo(w, r)
+		CreateTodo(w, r)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func getTodos(w http.ResponseWriter, r *http.Request) {
-	// Get all todos from the model and return as JSON
+// TodoHandler は特定のTodoに対するリクエストを処理
+func TodoHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := ExtractIDFromPath(r.URL.Path, "/todos/")
+	if err != nil {
+		http.Error(w, "Invalid ID in path", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		GetTodo(w, r, id)
+	case http.MethodPut:
+		UpdateTodo(w, r, id)
+	case http.MethodDelete:
+		DeleteTodo(w, r, id)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// GetTodos は全てのTodoを取得するハンドラー
+func GetTodos(w http.ResponseWriter, r *http.Request) {
 	todos, err := todoModel.GetTodos()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -35,32 +65,43 @@ func getTodos(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(todos)
 }
 
-func createTodo(w http.ResponseWriter, r *http.Request) {
-	// Create a new todo with the data from the request
-	var todo models.Todo
+// GetTodo は特定のTodoを取得するハンドラー
+func GetTodo(w http.ResponseWriter, r *http.Request, id int) {
+	todo, err := todoModel.GetTodo(id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Todo not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(todo)
+}
 
-	// Parse the JSON request body and decode it into the Todo struct
+// CreateTodo は新しいTodoを作成するハンドラー
+func CreateTodo(w http.ResponseWriter, r *http.Request) {
+	var todo models.Todo
 	err := json.NewDecoder(r.Body).Decode(&todo)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Use the model to create a new todo in the database
 	err = todoModel.CreateTodo(&todo)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Set the response header and send the created todo as JSON
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(todo)
 }
 
-func updateTodo(w http.ResponseWriter, r *http.Request) {
-	// Parse the JSON request body and decode it into the Todo struct
+// UpdateTodo は特定のTodoを更新するハンドラー
+func UpdateTodo(w http.ResponseWriter, r *http.Request, id int) {
 	var todo models.Todo
 	err := json.NewDecoder(r.Body).Decode(&todo)
 	if err != nil {
@@ -68,62 +109,52 @@ func updateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the ID from the query parameters
-	idStr := r.URL.Query().Get("id")
-	if idStr == "" {
-		http.Error(w, "Missing 'id' parameter", http.StatusBadRequest)
-		return
-	}
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		http.Error(w, "Invalid 'id' parameter", http.StatusBadRequest)
-		return
-	}
-
-	// Get the existing Todo
 	existingTodo, err := todoModel.GetTodo(id)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Todo not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Update the fields of the existing Todo if they were provided in the request
+	// 更新するフィールドをマージ
 	if todo.Title != "" {
 		existingTodo.Title = todo.Title
 	}
 	if todo.Description != "" {
 		existingTodo.Description = todo.Description
 	}
-	if todo.Completed != existingTodo.Completed {
-		existingTodo.Completed = todo.Completed
-	}
+	existingTodo.Completed = todo.Completed
 
-	// Use the model to update the todo in the database
 	err = todoModel.UpdateTodo(id, existingTodo)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Set the response header and send the updated todo as JSON
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(existingTodo)
 }
 
-func deleteTodo(w http.ResponseWriter, r *http.Request) {
-	// Delete an existing todo with the given ID
-	idStr := r.URL.Query().Get("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	err = todoModel.DeleteTodo(id)
+// DeleteTodo は特定のTodoを削除するハンドラー
+func DeleteTodo(w http.ResponseWriter, r *http.Request, id int) {
+	err := todoModel.DeleteTodo(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ExtractIDFromPath はURLパスからIDを抽出するヘルパー関数
+func ExtractIDFromPath(path string, prefix string) (int, error) {
+	// /todos/ を除去してIDを取得
+	idStr := strings.TrimPrefix(path, prefix)
+	if idStr == "" {
+		return 0, fmt.Errorf("ID not found in path")
+	}
+	return strconv.Atoi(idStr)
 }
