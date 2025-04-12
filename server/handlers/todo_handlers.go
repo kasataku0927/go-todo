@@ -6,20 +6,30 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/kasataku0927/go-todo/server/models"
 )
 
-var todoModel *models.TodoModel
+var todoModel models.TodoModelInterface
 
 func init() {
+	// テストモードかどうかを検出
+	// go test実行時にセットされる環境変数を検出
+	if os.Getenv("GO_TEST") == "1" || strings.HasSuffix(os.Args[0], ".test") {
+		// テストモードなので初期化をスキップ
+		return
+	}
+
+	// 実行モードなのでモデルを初期化
 	var err error
-	todoModel, err = models.NewTodoModel()
+	m, err := models.NewTodoModel()
 	if err != nil {
 		log.Fatalf("TodoModelの初期化エラー: %v", err)
 	}
+	todoModel = m
 }
 
 // TodosHandler はTodoコレクション全体に対するリクエストを処理

@@ -7,6 +7,16 @@ import (
 	"github.com/kasataku0927/go-todo/database/db"
 )
 
+// TodoModel インターフェースはTodoの操作に必要なメソッドを定義します
+type TodoModelInterface interface {
+	GetTodos() ([]Todo, error)
+	GetTodo(id int) (*Todo, error)
+	CreateTodo(todo *Todo) error
+	UpdateTodo(id int, todo *Todo) error
+	DeleteTodo(id int) error
+}
+
+// TodoModelの実装
 type TodoModel struct {
 	db *sql.DB
 }
